@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+  <!-- Outer circle -->
+  <circle cx="8" cy="8" r="7.5" fill="white" stroke="#333" stroke-width="0.5"/>
+  
+  <!-- Red half -->
+  <path d="M 0.5,8 A 7.5,7.5 0 0,1 8,0.5 A 7.5,7.5 0 0,1 15.5,8 Z" fill="#ff0000"/>
+  
+  <!-- Center line -->
+  <line x1="0.5" y1="8" x2="15.5" y2="8" stroke="#333" stroke-width="0.5"/>
+  
+  <!-- Center circle -->
+  <circle cx="8" cy="8" r="2.5" fill="white" stroke="#333" stroke-width="0.5"/>
+  
+  <!-- Inner circle -->
+  <circle cx="8" cy="8" r="1" fill="#ddd" stroke="#333" stroke-width="0.3"/>
+</svg>

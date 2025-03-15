@@ -1,0 +1,39 @@
+{
+    "manifest_version": 3,
+    "name": "Pokemon Card Stock Monitor",
+    "version": "1.0",
+    "description": "Monitors Best Buy for Pokemon card restocks and automates checkout",
+    "permissions": [
+      "storage",
+      "alarms",
+      "notifications",
+      "scripting",
+      "tabs"
+    ],
+    "host_permissions": [
+      "https://www.bestbuy.com/*",
+      "https://www.target.com/*"
+    ],
+    "background": {
+      "service_worker": "background.js"
+    },
+    "action": {
+      "default_popup": "popup.html",
+      "default_icon": {
+        "16": "images/icon16.png",
+        "48": "images/icon48.png",
+        "128": "images/icon128.png"
+      }
+    },
+    "icons": {
+      "16": "images/icon16.png",
+      "48": "images/icon48.png",
+      "128": "images/icon128.png"
+    },
+    "web_accessible_resources": [
+      {
+        "resources": ["monitor.html", "monitor.js"],
+        "matches": ["<all_urls>"]
+      }
+    ]
+  }

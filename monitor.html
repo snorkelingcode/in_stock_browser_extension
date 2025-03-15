@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Pokemon Card Stock Monitor - Full Page</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    
+    .status {
+      font-weight: bold;
+      color: #666;
+      padding: 5px 10px;
+      border-radius: 4px;
+    }
+    
+    .status.active {
+      background-color: #dcfce7;
+      color: #16a34a;
+    }
+    
+    .status.inactive {
+      background-color: #fee2e2;
+      color: #dc2626;
+    }
+    
+    .product-list {
+      margin-bottom: 20px;
+    }
+    
+    .product-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 15px;
+      border-bottom: 1px solid #eee;
+      transition: background-color 0.2s;
+    }
+    
+    .product-item:hover {
+      background-color: #f9fafb;
+    }
+    
+    .product-details {
+      flex: 1;
+    }
+    
+    .product-name {
+      font-weight: bold;
+      font-size: 1.1em;
+      margin-bottom: 5px;
+    }
+    
+    .product-url {
+      font-size: 0.8em;
+      color: #666;
+      max-width: 450px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-bottom: 5px;
+    }
+    
+    .product-status {
+      font-size: 0.9em;
+      margin-top: 4px;
+    }
+    
+    .in-stock {
+      color: #22c55e;
+      font-weight: bold;
+    }
+    
+    .out-of-stock {
+      color: #ef4444;
+    }
+    
+    .last-checked, .last-in-stock {
+      font-size: 0.75em;
+      color: #6b7280;
+      margin-top: 2px;
+    }
+    
+    .last-in-stock {
+      color: #fb923c;
+      font-style: italic;
+    }
+    
+    .product-actions {
+      display: flex;
+      gap: 10px;
+    }
+    
+    .cart-btn {
+      background-color: #22c55e;
+      border: none;
+      color: white;
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.9em;
+    }
+    
+    .cart-btn:disabled {
+      background-color: #9ca3af;
+      cursor: not-allowed;
+    }
+    
+    .remove-btn {
+      background-color: #ef4444;
+      border: none;
+      color: white;
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.9em;
+    }
+    
+    .control-panel {
+      background-color: #f9fafb;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
+    
+    .control-group {
+      flex: 1;
+      min-width: 200px;
+    }
+    
+    .control-group h3 {
+      margin-top: 0;
+      margin-bottom: 10px;
+      font-size: 1em;
+    }
+    
+    .form-group {
+      margin-bottom: 10px;
+    }
+    
+    label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: bold;
+      font-size: 0.9em;
+    }
+    
+    input[type="text"],
+    input[type="number"] {
+      width: 100%;
+      padding: 8px;
+      box-sizing: border-box;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+    }
+    
+    .toggle-btn {
+      background-color: #f3f4f6;
+      border: 1px solid #d1d5db;
+      color: #374151;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.9em;
+    }
+    
+    .toggle-btn.active {
+      background-color: #22c55e;
+      border-color: #16a34a;
+      color: white;
+    }
+    
+    .add-btn, .check-btn {
+      background-color: #3b82f6;
+      border: 1px solid #2563eb;
+      color: white;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.9em;
+    }
+    
+    .check-btn {
+      background-color: #8b5cf6;
+      border-color: #7c3aed;
+    }
+    
+    .small-btn {
+      background-color: #6b7280;
+      border: none;
+      color: white;
+      padding: 4px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.8em;
+      margin-left: 10px;
+    }
+    
+    .checkbox-group {
+      display: flex;
+      align-items: center;
+    }
+    
+    .checkbox-group input {
+      margin-right: 5px;
+    }
+    
+    .help-text {
+      font-size: 0.75em;
+      color: #6b7280;
+      margin-top: 2px;
+      display: block;
+    }
+    
+    .status-message {
+      margin-top: 10px;
+      text-align: center;
+      color: #22c55e;
+      font-weight: bold;
+    }
+    
+    .purchase-info {
+      margin-bottom: 15px;
+      font-size: 0.9em;
+      display: flex;
+      align-items: center;
+    }
+    
+    .next-check {
+      font-size: 0.9em;
+      color: #6b7280;
+      text-align: center;
+      margin-top: 10px;
+    }
+    
+    .auto-refresh {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    
+    .auto-refresh label {
+      margin-bottom: 0;
+    }
+    
+    .retailers {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    
+    .retailer-badge {
+      padding: 5px 12px;
+      border-radius: 20px;
+      background-color: #e5e7eb;
+      color: #6b7280;
+      font-size: 0.9em;
+      font-weight: bold;
+    }
+    
+    .retailer-badge.active {
+      background-color: #dcfce7;
+      color: #16a34a;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Pokemon Card Stock Monitor</h1>
+    <div class="status inactive" id="status">Inactive</div>
+    <button id="toggleMonitoring" class="toggle-btn">Start Monitoring</button>
+  </div>
+  
+  <div class="retailers">
+    <div class="retailer-badge active" title="Monitoring Best Buy">Best Buy</div>
+    <div class="retailer-badge active" title="Monitoring Target">Target</div>
+  </div>
+  
+  <div class="control-panel">
+    <div class="control-group">
+      <h3>Monitoring Settings</h3>
+      <div class="form-group">
+        <label for="checkInterval">Check Interval (seconds):</label>
+        <input type="number" id="checkInterval" min="1" value="1">
+        <small class="help-text">Set to 1 second for most aggressive checking</small>
+      </div>
+      
+      <div class="form-group">
+        <label for="purchaseLimit">Purchase Limit:</label>
+        <input type="number" id="purchaseLimit" min="1" max="10" value="3">
+        <small class="help-text">Maximum number of items to purchase (ethical shopping)</small>
+      </div>
+      
+      <div class="purchase-info">
+        <div id="purchaseCount">Items Purchased: 0/3</div>
+        <button id="resetCount" class="small-btn">Reset Count</button>
+      </div>
+    </div>
+    
+    <div class="control-group">
+      <h3>Add New Product</h3>
+      <div class="form-group">
+        <label for="productName">Product Name:</label>
+        <input type="text" id="productName" placeholder="e.g., Pokemon Scarlet & Violet Booster Box">
+      </div>
+      
+      <div class="form-group">
+        <label for="productUrl">Best Buy Product URL:</label>
+        <input type="text" id="productUrl" placeholder="https://www.bestbuy.com/site/...">
+      </div>
+      
+      <div class="form-group">
+        <label for="addToCartUrl">Direct Add to Cart URL (Optional):</label>
+        <input type="text" id="addToCartUrl" placeholder="https://api.bestbuy.com/click/...">
+        <small class="help-text">Find this by right-clicking "Add to Cart" button and copy link address</small>
+      </div>
+      
+      <div class="form-group checkbox-group">
+        <input type="checkbox" id="autoCheckout" checked>
+        <label for="autoCheckout">Attempt Auto-Checkout</label>
+      </div>
+      
+      <button id="addProduct" class="add-btn">Add Product</button>
+    </div>
+  </div>
+  
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+    <button id="checkNow" class="check-btn">Check Stock Now</button>
+    <div class="next-check" id="nextCheck">Next check in: <span id="countdown">--</span></div>
+    <div class="auto-refresh">
+      <input type="checkbox" id="autoRefresh" checked>
+      <label for="autoRefresh">Auto-refresh product list</label>
+    </div>
+  </div>
+  
+  <div id="status-message" class="status-message"></div>
+  
+  <h2>Monitored Products</h2>
+  <div class="product-list" id="productList">
+    <div class="product-item">
+      <p>No products added yet. Add a Pokemon card URL above.</p>
+    </div>
+  </div>
+  
+  <script src="monitor.js"></script>
+</body>
+</html>

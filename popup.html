@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Pokemon Card Stock Monitor</title>
+  <style>
+    body {
+      width: 400px;
+      font-family: Arial, sans-serif;
+      padding: 10px;
+    }
+    
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+    }
+    
+    .status {
+      font-weight: bold;
+      color: #666;
+    }
+    
+    .status.active {
+      color: #22c55e;
+    }
+    
+    .product-list {
+      margin-bottom: 15px;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    
+    .product-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px;
+      border-bottom: 1px solid #eee;
+    }
+    
+    .product-details {
+      flex: 1;
+    }
+    
+    .product-name {
+      font-weight: bold;
+    }
+    
+    .product-url {
+      font-size: 0.8em;
+      color: #666;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 250px;
+    }
+    
+    .product-status {
+      font-size: 0.8em;
+      margin-top: 4px;
+    }
+    
+    .in-stock {
+      color: #22c55e;
+      font-weight: bold;
+    }
+    
+    .out-of-stock {
+      color: #ef4444;
+    }
+    
+    .last-checked, .last-in-stock {
+      font-size: 0.75em;
+      color: #6b7280;
+      margin-top: 2px;
+    }
+    
+    .last-in-stock {
+      color: #fb923c;
+      font-style: italic;
+    }
+    
+    .product-actions button {
+      margin-left: 5px;
+    }
+    
+    .form-group {
+      margin-bottom: 10px;
+    }
+    
+    label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: bold;
+    }
+    
+    input[type="text"],
+    input[type="number"] {
+      width: 100%;
+      padding: 5px;
+      box-sizing: border-box;
+    }
+    
+    .toggle-btn {
+      background-color: #f3f4f6;
+      border: 1px solid #d1d5db;
+      color: #374151;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    
+    .toggle-btn.active {
+      background-color: #22c55e;
+      border-color: #16a34a;
+      color: white;
+    }
+    
+    .add-btn, .check-btn {
+      background-color: #3b82f6;
+      border: 1px solid #2563eb;
+      color: white;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+    
+    .check-btn {
+      background-color: #8b5cf6;
+      border-color: #7c3aed;
+      margin-right: 10px;
+    }
+    
+    .remove-btn {
+      background-color: #ef4444;
+      border: none;
+      color: white;
+      padding: 4px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.8em;
+    }
+    
+    .cart-btn {
+      background-color: #22c55e;
+      border: none;
+      color: white;
+      padding: 4px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.8em;
+      margin-right: 5px;
+    }
+    
+    .cart-btn:disabled {
+      background-color: #9ca3af;
+      cursor: not-allowed;
+    }
+    
+    .checkbox-group {
+      display: flex;
+      align-items: center;
+    }
+    
+    .checkbox-group input {
+      margin-right: 5px;
+    }
+    
+    .actions {
+      display: flex;
+      gap: 10px;
+    }
+    
+    .help-text {
+      font-size: 0.75em;
+      color: #6b7280;
+      margin-top: 2px;
+      display: block;
+    }
+    
+    .small-btn {
+      background-color: #6b7280;
+      border: none;
+      color: white;
+      padding: 2px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.8em;
+      margin-left: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h2>Pokemon Card Monitor</h2>
+    <div class="status" id="status">Inactive</div>
+    <button id="toggleMonitoring" class="toggle-btn">Start Monitoring</button>
+  </div>
+  
+  <div class="form-group">
+    <label for="checkInterval">Check Interval (seconds):</label>
+    <input type="number" id="checkInterval" min="5" value="30">
+  </div>
+  
+  <div class="form-group">
+    <label for="purchaseLimit">Purchase Limit:</label>
+    <input type="number" id="purchaseLimit" min="1" max="10" value="3">
+    <small class="help-text">Maximum number of items to purchase (ethical shopping)</small>
+  </div>
+  
+  <div class="purchase-info" style="margin-bottom: 15px; font-size: 0.9em;">
+    <div id="purchaseCount">Items Purchased: 0/3</div>
+    <button id="resetCount" class="small-btn">Reset Count</button>
+  </div>
+  
+  <div class="product-list" id="productList">
+    <div class="product-item">
+      <p>No products added yet. Add a Pokemon card URL below.</p>
+    </div>
+  </div>
+  
+  <div class="form-group">
+    <label for="productName">Product Name:</label>
+    <input type="text" id="productName" placeholder="e.g., Pokemon Scarlet & Violet Booster Box">
+  </div>
+  
+  <div class="form-group">
+    <label for="productUrl">Best Buy Product URL:</label>
+    <input type="text" id="productUrl" placeholder="https://www.bestbuy.com/site/...">
+  </div>
+  
+  <div class="form-group">
+    <label for="addToCartUrl">Direct Add to Cart URL (Optional):</label>
+    <input type="text" id="addToCartUrl" placeholder="https://api.bestbuy.com/click/...">
+    <small class="help-text">Find this by right-clicking "Add to Cart" button and copy link address</small>
+  </div>
+  
+  <div class="form-group checkbox-group">
+    <input type="checkbox" id="autoCheckout" checked>
+    <label for="autoCheckout">Attempt Auto-Checkout</label>
+  </div>
+  
+  <div class="actions">
+    <button id="checkNow" class="check-btn">Check Stock Now</button>
+    <button id="addProduct" class="add-btn">Add Product</button>
+  </div>
+  
+  <div id="status-message" style="margin-top: 10px; text-align: center; color: #22c55e; font-weight: bold;"></div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>
