@@ -102,124 +102,271 @@ async function checkProductStock(product) {
 
 // Check Target product stock
 async function checkTargetStock(product) {
-  try {
-    // Try to extract the TCIN (Target's product ID)
-    let tcin = '';
-    
-    // Extract TCIN from URL
-    if (product.url.includes('/A-')) {
-      const parts = product.url.split('/A-');
-      if (parts.length > 1) {
-        tcin = parts[1].split('?')[0].split('#')[0];
-      }
-    }
-    
-    // If we found a TCIN, use the API directly (much faster)
-    if (tcin && /^\d+$/.test(tcin)) {
-      console.log(`Using Target API for TCIN: ${tcin}`);
+    try {
+      // Try to extract the TCIN (Target's product ID)
+      let tcin = '';
       
-      // Get store ID if we have it stored (for pickup availability)
-      const storeInfo = await chrome.storage.sync.get(['targetStoreId']);
-      const storeId = storeInfo.targetStoreId || '';
-      
-      // API endpoints to check
-      const apis = [
-        `https://www.target.com/api/web_platform/product_fulfillment/v1/${tcin}?key=feee1e2d7f9aabd4e1b9604359f7c52e&nearby=${storeId}&inventory_type=all&zip=`,
-        `https://redsky.target.com/redsky_aggregations/v1/web/pdp_client_v1?key=feee1e2d7f9aabd4e1b9604359f7c52e&tcin=${tcin}&pricing_store_id=${storeId}`
-      ];
-      
-      // Try each API endpoint
-      for (let i = 0; i < apis.length; i++) {
-        try {
-          const response = await fetch(apis[i], {
-            headers: { 'Accept': 'application/json' }
-          });
-          
-          if (response.ok) {
-            const data = await response.json();
-            
-            // First API format (fulfillment)
-            if (data.fulfillment) {
-              // Check if shipping available
-              const shipping = data.fulfillment.shipping;
-              if (shipping && shipping.available) {
-                return true;
-              }
-              
-              // Check if store pickup available
-              const pickup = data.fulfillment.store_options;
-              if (pickup && pickup.length > 0 && pickup.some(store => store.in_store_only === false)) {
-                return true;
-              }
-            }
-            
-            // Second API format (redsky)
-            if (data.data && data.data.product) {
-              const product = data.data.product;
-              
-              // Check for available_to_promise info
-              if (product.fulfillment && product.fulfillment.shipping_options && 
-                  product.fulfillment.shipping_options.available_to_promise && 
-                  product.fulfillment.shipping_options.available_to_promise.availability !== "OUT_OF_STOCK") {
-                return true;
-              }
-              
-              // Check button state
-              if (product.button_state && product.button_state !== "OUT_OF_STOCK" && 
-                  product.button_state !== "SOLD_OUT") {
-                return true;
-              }
-            }
-          }
-        } catch (apiError) {
-          console.error(`Target API error for endpoint ${i}:`, apiError);
+      // Extract TCIN from URL
+      if (product.url.includes('/A-')) {
+        const parts = product.url.split('/A-');
+        if (parts.length > 1) {
+          tcin = parts[1].split('?')[0].split('#')[0];
         }
       }
+      
+      // First check: Use existing API method
+      let initialCheckResult = false;
+      
+      // If we found a TCIN, use the API directly (much faster)
+      if (tcin && /^\d+$/.test(tcin)) {
+        console.log(`Using Target API for TCIN: ${tcin}`);
+        
+        // Get store ID if we have it stored (for pickup availability)
+        const storeInfo = await chrome.storage.sync.get(['targetStoreId']);
+        const storeId = storeInfo.targetStoreId || '';
+        
+        // API endpoints to check
+        const apis = [
+          `https://www.target.com/api/web_platform/product_fulfillment/v1/${tcin}?key=feee1e2d7f9aabd4e1b9604359f7c52e&nearby=${storeId}&inventory_type=all&zip=`,
+          `https://redsky.target.com/redsky_aggregations/v1/web/pdp_client_v1?key=feee1e2d7f9aabd4e1b9604359f7c52e&tcin=${tcin}&pricing_store_id=${storeId}`
+        ];
+        
+        // Try each API endpoint
+        for (let i = 0; i < apis.length; i++) {
+          try {
+            const response = await fetch(apis[i], {
+              headers: { 'Accept': 'application/json' }
+            });
+            
+            if (response.ok) {
+              const data = await response.json();
+              
+              // First API format (fulfillment)
+              if (data.fulfillment) {
+                // Check if shipping available
+                const shipping = data.fulfillment.shipping;
+                if (shipping && shipping.available) {
+                  initialCheckResult = true;
+                }
+                
+                // Check if store pickup available
+                const pickup = data.fulfillment.store_options;
+                if (pickup && pickup.length > 0 && pickup.some(store => store.in_store_only === false)) {
+                  initialCheckResult = true;
+                }
+              }
+              
+              // Second API format (redsky)
+              if (data.data && data.data.product) {
+                const product = data.data.product;
+                
+                // Check for available_to_promise info
+                if (product.fulfillment && product.fulfillment.shipping_options && 
+                    product.fulfillment.shipping_options.available_to_promise && 
+                    product.fulfillment.shipping_options.available_to_promise.availability !== "OUT_OF_STOCK") {
+                  initialCheckResult = true;
+                }
+                
+                // Check button state
+                if (product.button_state && product.button_state !== "OUT_OF_STOCK" && 
+                    product.button_state !== "SOLD_OUT") {
+                  initialCheckResult = true;
+                }
+              }
+            }
+          } catch (apiError) {
+            console.error(`Target API error for endpoint ${i}:`, apiError);
+          }
+        }
+      }
+      
+      // Fallback to direct page check if API method fails or TCIN not found
+      if (!initialCheckResult) {
+        const response = await fetch(product.url, {
+          headers: { 'Cache-Control': 'no-cache' }
+        });
+        
+        if (response.ok) {
+          const text = await response.text();
+          
+          // Check for Target's in-stock indicators
+          const inStockIndicators = [
+            '"availability_status":"IN_STOCK"',
+            '"available_to_promise":true',
+            'data-test="shippingButton"',
+            'data-test="orderPickupButton"',
+            'Add to cart</button>',
+            'available online',
+            'pick up today'
+          ];
+          
+          const outOfStockIndicators = [
+            '"availability_status":"OUT_OF_STOCK"',
+            'Sold out</button>',
+            'Out of stock at',
+            'Out of stock online',
+            'data-test="oosDeliveryOption"'
+          ];
+          
+          // Check if any in-stock indicators are present
+          const isInStock = inStockIndicators.some(indicator => 
+            text.toLowerCase().includes(indicator.toLowerCase()));
+          
+          // Check if any out-of-stock indicators are present
+          const isOutOfStock = outOfStockIndicators.some(indicator => 
+            text.toLowerCase().includes(indicator.toLowerCase()));
+          
+          // If in-stock indicators are present and out-of-stock indicators are not, consider it in stock
+          if (isInStock && !isOutOfStock) {
+            initialCheckResult = true;
+          }
+        }
+      }
+      
+      // If initial check passes, perform a secondary verification
+      if (initialCheckResult) {
+        console.log(`Initial stock check passed for ${product.url}, performing secondary verification...`);
+        
+        // Secondary verification: Try to check if product is available for checkout
+        const verificationResult = await verifyTargetAvailability(product, tcin);
+        
+        if (verificationResult) {
+          console.log(`${product.url} passed secondary verification, confirmed in stock!`);
+          return true;
+        } else {
+          console.log(`${product.url} failed secondary verification, likely a false positive.`);
+          return false;
+        }
+      }
+      
+      return initialCheckResult;
+    } catch (error) {
+      console.error(`Error checking Target stock for ${product.url}:`, error);
+      return false;
     }
-    
-    // Fallback to direct page check
-    const response = await fetch(product.url, {
-      headers: { 'Cache-Control': 'no-cache' }
-    });
-    
-    if (!response.ok) return false;
-    
-    const text = await response.text();
-    
-    // Check for Target's in-stock indicators
-    const inStockIndicators = [
-      '"availability_status":"IN_STOCK"',
-      '"available_to_promise":true',
-      'data-test="shippingButton"',
-      'data-test="orderPickupButton"',
-      'Add to cart</button>',
-      'available online',
-      'pick up today'
-    ];
-    
-    const outOfStockIndicators = [
-      '"availability_status":"OUT_OF_STOCK"',
-      'Sold out</button>',
-      'Out of stock at',
-      'Out of stock online',
-      'data-test="oosDeliveryOption"'
-    ];
-    
-    // Check if any in-stock indicators are present
-    const isInStock = inStockIndicators.some(indicator => 
-      text.toLowerCase().includes(indicator.toLowerCase()));
-    
-    // Check if any out-of-stock indicators are present
-    const isOutOfStock = outOfStockIndicators.some(indicator => 
-      text.toLowerCase().includes(indicator.toLowerCase()));
-    
-    // If in-stock indicators are present and out-of-stock indicators are not, consider it in stock
-    return isInStock && !isOutOfStock;
-  } catch (error) {
-    console.error(`Error checking Target stock for ${product.url}:`, error);
-    return false;
   }
-}
+  
+  // New function to perform a deeper verification check for Target products
+  async function verifyTargetAvailability(product, tcin) {
+    try {
+      // If we don't have a TCIN, extract it
+      if (!tcin && product.url.includes('/A-')) {
+        const parts = product.url.split('/A-');
+        if (parts.length > 1) {
+          tcin = parts[1].split('?')[0].split('#')[0];
+        }
+      }
+      
+      if (!tcin) {
+        console.log('Could not extract TCIN for secondary verification');
+        return false;
+      }
+      
+      // Use fulfillment API which indicates actual checkout ability
+      const fulfillmentUrl = `https://www.target.com/v1/available_to_promise/fulfill?key=feee1e2d7f9aabd4e1b9604359f7c52e`;
+      
+      // Prepare the payload that simulates adding to cart
+      const payload = {
+        "items": [{
+          "tcin": tcin,
+          "quantity": 1
+        }]
+      };
+      
+      // Make the request to check fulfillment
+      const response = await fetch(fulfillmentUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+      
+      if (!response.ok) {
+        return false;
+      }
+      
+      const data = await response.json();
+      
+      // Check if the product can be fulfilled (either via shipping or pickup)
+      if (data && data.items && data.items.length > 0) {
+        const item = data.items[0];
+        
+        // Check if item can be shipped
+        if (item.fulfillment && item.fulfillment.shipping && item.fulfillment.shipping.available) {
+          return true;
+        }
+        
+        // Check if item is available for pickup
+        if (item.fulfillment && item.fulfillment.pickup && 
+            item.fulfillment.pickup.availability === "AVAILABLE") {
+          return true;
+        }
+        
+        // Check generic availability 
+        if (item.available) {
+          return true;
+        }
+      }
+      
+      // Additional verification: try the cart API directly
+      try {
+        const cartCheckUrl = `https://www.target.com/guest/checkout/v1/cart`;
+        
+        const cartPayload = {
+          "cart": {
+            "items": [{
+              "item_id": tcin,
+              "quantity": 1
+            }],
+            "item_type": "REGULAR",
+            "channel_id": "10"
+          }
+        };
+        
+        const cartResponse = await fetch(cartCheckUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify(cartPayload)
+        });
+        
+        if (cartResponse.ok) {
+          const cartData = await cartResponse.json();
+          // If we can add to cart successfully, it's in stock
+          if (cartData && !cartData.errors) {
+            return true;
+          }
+          
+          // Check for specific error types
+          if (cartData.errors) {
+            // Filter out errors not related to stock availability
+            const stockErrors = cartData.errors.filter(error => 
+              error.code === "OUT_OF_STOCK" || 
+              error.message.toLowerCase().includes("out of stock") ||
+              error.message.toLowerCase().includes("sold out")
+            );
+            
+            // If there are no stock-related errors, the product might be available
+            if (stockErrors.length === 0 && cartData.errors.length > 0) {
+              // The error might be something else (like auth), not stock related
+              return true;
+            }
+          }
+        }
+      } catch (cartError) {
+        console.error("Cart verification failed:", cartError);
+      }
+      
+      return false;
+    } catch (error) {
+      console.error("Target availability verification failed:", error);
+      return false;
+    }
+  }
 
 // Check Best Buy product stock
 async function checkBestBuyStock(product) {
