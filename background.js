@@ -102,149 +102,228 @@ async function checkProductStock(product) {
 
 // Check Target product stock
 async function checkTargetStock(product) {
-    try {
-      // Try to extract the TCIN (Target's product ID)
-      let tcin = '';
+  try {
+    // Instead of using APIs, we'll use a front-end only approach
+    
+    // 1. Add randomized delay to simulate human browsing
+    const randomDelay = Math.floor(Math.random() * 2000) + 1000; // 1-3 seconds
+    await new Promise(resolve => setTimeout(resolve, randomDelay));
+    
+    // 2. Use a more browser-like request with proper headers
+    const headers = {
+      'User-Agent': getRandomUserAgent(),
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+      'Accept-Language': 'en-US,en;q=0.5',
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache',
+      'DNT': '1',
+      'Connection': 'keep-alive',
+      'Upgrade-Insecure-Requests': '1',
+      'Sec-Fetch-Dest': 'document',
+      'Sec-Fetch-Mode': 'navigate',
+      'Sec-Fetch-Site': 'none',
+      'Sec-Fetch-User': '?1',
+      'Referer': 'https://www.google.com/'
+    };
+    
+    // 3. Use the normal product page instead of APIs
+    const response = await fetch(product.url, {
+      headers: headers,
+      // Important: don't send cookies with every request
+      credentials: 'omit'
+    });
+    
+    if (!response.ok) return false;
+    
+    const text = await response.text();
+    
+    // 4. Look for HTML patterns indicating in-stock status
+    // These are more reliable than API responses and less likely to trigger bot detection
+    const inStockIndicators = [
+      'Add to cart</button>',
+      'add to cart</button>',
+      'Add to Cart</button>',
+      'data-test="shippingButton"',
+      'data-test="orderPickupButton"',
+      'pick up ready within',
+      'shipping to',
+      'deliver it'
+    ];
+    
+    const outOfStockIndicators = [
+      'Sold out</button>',
+      'sold out</button>',
+      'Out of stock</button>',
+      'out of stock</button>',
+      'Out of stock at',
+      'out of stock at',
+      'Currently unavailable',
+      'currently unavailable'
+    ];
+    
+    // Check for in-stock indicators
+    const isInStock = inStockIndicators.some(indicator => 
+      text.toLowerCase().includes(indicator.toLowerCase()));
+    
+    // Check for out-of-stock indicators
+    const isOutOfStock = outOfStockIndicators.some(indicator => 
+      text.toLowerCase().includes(indicator.toLowerCase()));
+    
+    // If in-stock indicators are present and out-of-stock indicators are not, consider it in stock
+    return isInStock && !isOutOfStock;
+  } catch (error) {
+    console.error(`Error checking Target stock for ${product.url}:`, error);
+    return false;
+  }
+}
+
+// Helper function to get random user agents
+function getRandomUserAgent() {
+  const userAgents = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.51 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:98.0) Gecko/20100101 Firefox/98.0',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 12_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.3 Safari/605.1.15',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.51 Safari/537.36 Edg/99.0.1150.36',
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.51 Safari/537.36'
+  ];
+  
+  return userAgents[Math.floor(Math.random() * userAgents.length)];
+}
+
+// Modify the setupMonitoring function to add jitter to the timing
+function setupMonitoring(intervalSeconds) {
+  // Clear any existing alarms
+  chrome.alarms.clearAll();
+  
+  // Add jitter to the interval to make it less predictable
+  // This helps avoid detection patterns
+  const jitter = Math.random() * 0.3; // Up to 30% jitter
+  const adjustedInterval = intervalSeconds * (1 + jitter);
+  
+  // Create a new alarm that will trigger the check
+  chrome.alarms.create('checkStock', {
+    periodInMinutes: adjustedInterval / 60
+  });
+  
+  console.log(`Monitoring set up with interval: ${adjustedInterval.toFixed(2)} seconds`);
+  
+  // Listen for the alarm
+  chrome.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === 'checkStock' && isMonitoring) {
+      checkAllProductsStock();
+    }
+  });
+}
+
+// Modified checkAllProductsStock to distribute checks over time
+async function checkAllProductsStock() {
+  if (monitoredProducts.length === 0 || checkoutInProgress) return;
+  
+  // Instead of checking all products at once, stagger them
+  for (const product of monitoredProducts) {
+    // Add a random delay between product checks
+    const staggerDelay = Math.floor(Math.random() * 5000) + 2000; // 2-7 seconds between products
+    await new Promise(resolve => setTimeout(resolve, staggerDelay));
+    
+    // Skip some checks randomly (about 10% of the time)
+    if (Math.random() < 0.1) {
+      console.log(`Randomly skipping check for ${product.name} to appear more human-like`);
+      continue;
+    }
+    
+    const inStock = await checkProductStock(product);
+    
+    // Update stock status
+    const previousStatus = stockStatus[product.url];
+    stockStatus[product.url] = {
+      inStock: inStock,
+      lastChecked: new Date().toLocaleString(),
+      product: product,
+      lastInStock: inStock ? new Date().toLocaleString() : (previousStatus?.lastInStock || null)
+    };
+    
+    // If status changed to in stock, notify
+    if (inStock && (!previousStatus || !previousStatus.inStock)) {
+      notifyStockAvailable(product);
       
-      // Extract TCIN from URL
-      if (product.url.includes('/A-')) {
-        const parts = product.url.split('/A-');
-        if (parts.length > 1) {
-          tcin = parts[1].split('?')[0].split('#')[0];
-        }
+      if (product.autoCheckout) {
+        checkoutInProgress = true;
+        await attemptCheckout(product);
+        checkoutInProgress = false;
       }
-      
-      // First check: Use existing API method
-      let initialCheckResult = false;
-      
-      // If we found a TCIN, use the API directly (much faster)
-      if (tcin && /^\d+$/.test(tcin)) {
-        console.log(`Using Target API for TCIN: ${tcin}`);
-        
-        // Get store ID if we have it stored (for pickup availability)
-        const storeInfo = await chrome.storage.sync.get(['targetStoreId']);
-        const storeId = storeInfo.targetStoreId || '';
-        
-        // API endpoints to check
-        const apis = [
-          `https://www.target.com/api/web_platform/product_fulfillment/v1/${tcin}?key=feee1e2d7f9aabd4e1b9604359f7c52e&nearby=${storeId}&inventory_type=all&zip=`,
-          `https://redsky.target.com/redsky_aggregations/v1/web/pdp_client_v1?key=feee1e2d7f9aabd4e1b9604359f7c52e&tcin=${tcin}&pricing_store_id=${storeId}`
-        ];
-        
-        // Try each API endpoint
-        for (let i = 0; i < apis.length; i++) {
-          try {
-            const response = await fetch(apis[i], {
-              headers: { 'Accept': 'application/json' }
-            });
-            
-            if (response.ok) {
-              const data = await response.json();
-              
-              // First API format (fulfillment)
-              if (data.fulfillment) {
-                // Check if shipping available
-                const shipping = data.fulfillment.shipping;
-                if (shipping && shipping.available) {
-                  initialCheckResult = true;
-                }
-                
-                // Check if store pickup available
-                const pickup = data.fulfillment.store_options;
-                if (pickup && pickup.length > 0 && pickup.some(store => store.in_store_only === false)) {
-                  initialCheckResult = true;
-                }
-              }
-              
-              // Second API format (redsky)
-              if (data.data && data.data.product) {
-                const product = data.data.product;
-                
-                // Check for available_to_promise info
-                if (product.fulfillment && product.fulfillment.shipping_options && 
-                    product.fulfillment.shipping_options.available_to_promise && 
-                    product.fulfillment.shipping_options.available_to_promise.availability !== "OUT_OF_STOCK") {
-                  initialCheckResult = true;
-                }
-                
-                // Check button state
-                if (product.button_state && product.button_state !== "OUT_OF_STOCK" && 
-                    product.button_state !== "SOLD_OUT") {
-                  initialCheckResult = true;
-                }
-              }
-            }
-          } catch (apiError) {
-            console.error(`Target API error for endpoint ${i}:`, apiError);
-          }
-        }
-      }
-      
-      // Fallback to direct page check if API method fails or TCIN not found
-      if (!initialCheckResult) {
-        const response = await fetch(product.url, {
-          headers: { 'Cache-Control': 'no-cache' }
-        });
-        
-        if (response.ok) {
-          const text = await response.text();
-          
-          // Check for Target's in-stock indicators
-          const inStockIndicators = [
-            '"availability_status":"IN_STOCK"',
-            '"available_to_promise":true',
-            'data-test="shippingButton"',
-            'data-test="orderPickupButton"',
-            'Add to cart</button>',
-            'available online',
-            'pick up today'
-          ];
-          
-          const outOfStockIndicators = [
-            '"availability_status":"OUT_OF_STOCK"',
-            'Sold out</button>',
-            'Out of stock at',
-            'Out of stock online',
-            'data-test="oosDeliveryOption"'
-          ];
-          
-          // Check if any in-stock indicators are present
-          const isInStock = inStockIndicators.some(indicator => 
-            text.toLowerCase().includes(indicator.toLowerCase()));
-          
-          // Check if any out-of-stock indicators are present
-          const isOutOfStock = outOfStockIndicators.some(indicator => 
-            text.toLowerCase().includes(indicator.toLowerCase()));
-          
-          // If in-stock indicators are present and out-of-stock indicators are not, consider it in stock
-          if (isInStock && !isOutOfStock) {
-            initialCheckResult = true;
-          }
-        }
-      }
-      
-      // If initial check passes, perform a secondary verification
-      if (initialCheckResult) {
-        console.log(`Initial stock check passed for ${product.url}, performing secondary verification...`);
-        
-        // Secondary verification: Try to check if product is available for checkout
-        const verificationResult = await verifyTargetAvailability(product, tcin);
-        
-        if (verificationResult) {
-          console.log(`${product.url} passed secondary verification, confirmed in stock!`);
-          return true;
-        } else {
-          console.log(`${product.url} failed secondary verification, likely a false positive.`);
-          return false;
-        }
-      }
-      
-      return initialCheckResult;
-    } catch (error) {
-      console.error(`Error checking Target stock for ${product.url}:`, error);
-      return false;
     }
   }
+  
+  // Broadcast stock status update to popup if open
+  chrome.runtime.sendMessage({
+    action: 'stockStatusUpdate',
+    stockStatus: stockStatus
+  });
+}
+
+// Modify the UI to set reasonable minimum values for intervals
+function updateMonitorSettings() {
+  // Modify monitor.html and popup.html to set these minimums
+  
+  // In monitor.html, change the interval input:
+  // <input type="number" id="checkInterval" min="30" value="60">
+  // <small class="help-text">Minimum 30 seconds recommended to avoid detection</small>
+  
+  // In popup.html, change the interval input:
+  // <input type="number" id="checkInterval" min="30" value="60">
+  // <small class="help-text">Minimum 30 seconds recommended to avoid detection</small>
+  
+  // And update the JS to enforce these minimums:
+  checkIntervalInput.addEventListener('change', () => {
+    const seconds = parseInt(checkIntervalInput.value, 10);
+    if (seconds < 30) {
+      checkIntervalInput.value = 30;
+      alert('Warning: Intervals below 30 seconds may trigger site bans. Using 30 seconds minimum.');
+      return;
+    }
+    
+    chrome.runtime.sendMessage({
+      action: 'updateCheckInterval',
+      seconds
+    });
+  });
+}
+
+// Add cookie management to rotate/clear cookies occasionally
+async function manageCookies() {
+  // Clear cookies for target.com every X checks to avoid building up a consistent profile
+  // This should be called periodically, perhaps every 10-20 checks
+  
+  const targetDomains = ['target.com', 'www.target.com', '.target.com'];
+  
+  // Get all cookies for these domains
+  for (const domain of targetDomains) {
+    const cookies = await chrome.cookies.getAll({ domain });
+    
+    // Remove each cookie
+    for (const cookie of cookies) {
+      await chrome.cookies.remove({
+        url: `https://${cookie.domain}${cookie.path}`,
+        name: cookie.name
+      });
+    }
+  }
+  
+  console.log('Cleared cookies for Target domains to maintain anonymity');
+}
+
+// New function: Randomize which products get checked each cycle
+function getProductsToCheck() {
+  if (monitoredProducts.length <= 3) {
+    // If we have 3 or fewer products, check them all
+    return monitoredProducts;
+  }
+  
+  // Otherwise, randomly select about 70% of products each time
+  const shuffled = [...monitoredProducts].sort(() => 0.5 - Math.random());
+  const numToCheck = Math.ceil(monitoredProducts.length * 0.7);
+  return shuffled.slice(0, numToCheck);
+}
   
   // New function to perform a deeper verification check for Target products
   async function verifyTargetAvailability(product, tcin) {
@@ -1145,3 +1224,376 @@ function performGenericAddToCart() {
     
     return true; // Required for async response
   });
+
+  // Request queue to manage and throttle API calls
+class RequestQueue {
+  constructor() {
+    this.queue = [];
+    this.processing = false;
+    this.lastRequestTime = 0;
+    this.userAgents = [
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Safari/605.1.15',
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0',
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.212 Safari/537.36',
+      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36'
+    ];
+  }
+
+  // Add a request to the queue
+  enqueue(url, options = {}) {
+    return new Promise((resolve, reject) => {
+      this.queue.push({
+        url,
+        options,
+        resolve,
+        reject
+      });
+      
+      if (!this.processing) {
+        this.processQueue();
+      }
+    });
+  }
+
+  // Process the queue with delays between requests
+  async processQueue() {
+    if (this.queue.length === 0) {
+      this.processing = false;
+      return;
+    }
+    
+    this.processing = true;
+    
+    // Calculate delay - random between 3-8 seconds to appear more human-like
+    // For Target, which has stricter anti-bot measures, we need more delay
+    const now = Date.now();
+    const timeSinceLastRequest = now - this.lastRequestTime;
+    
+    // Base delay between 3-8 seconds
+    let delay = Math.floor(Math.random() * 5000) + 3000;
+    
+    // If last request was very recent, add more delay
+    if (timeSinceLastRequest < 10000) {
+      delay += Math.floor(Math.random() * 5000) + 5000;
+    }
+    
+    // If too many requests lately, add even more delay
+    if (this.queue.length > 5) {
+      delay += Math.floor(Math.random() * 10000) + 10000;
+      console.log(`High queue depth (${this.queue.length}), increasing delay to ${delay}ms`);
+    }
+    
+    // Wait for the delay
+    await new Promise(resolve => setTimeout(resolve, delay));
+    
+    // Get the next request
+    const request = this.queue.shift();
+    
+    try {
+      // Add random user agent and other headers to make request look more human
+      const headers = {
+        'User-Agent': this.userAgents[Math.floor(Math.random() * this.userAgents.length)],
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+        'DNT': '1',
+        'Upgrade-Insecure-Requests': '1',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-User': '?1',
+        'Sec-GPC': '1',
+        ...request.options.headers
+      };
+      
+      // Add a random query parameter to bypass caching
+      const url = new URL(request.url);
+      url.searchParams.set('_t', Date.now());
+      
+      const response = await fetch(url.toString(), {
+        ...request.options,
+        headers
+      });
+      
+      this.lastRequestTime = Date.now();
+      request.resolve(response);
+    } catch (error) {
+      request.reject(error);
+    }
+    
+    // Process the next request
+    this.processQueue();
+  }
+}
+
+// Initialize the request queue
+const targetRequestQueue = new RequestQueue();
+
+// Modify the checkTargetStock function to use the queue
+async function checkTargetStock(product) {
+  try {
+    // Try to extract the TCIN (Target's product ID)
+    let tcin = '';
+    
+    // Extract TCIN from URL
+    if (product.url.includes('/A-')) {
+      const parts = product.url.split('/A-');
+      if (parts.length > 1) {
+        tcin = parts[1].split('?')[0].split('#')[0];
+      }
+    }
+    
+    // First, try with a direct page load which is less likely to be blocked
+    // This simulates a normal user visiting the page
+    try {
+      const response = await targetRequestQueue.enqueue(product.url);
+      
+      if (response.ok) {
+        const text = await response.text();
+        
+        // Check for Target's in-stock indicators
+        const inStockIndicators = [
+          '"availability_status":"IN_STOCK"',
+          '"available_to_promise":true',
+          'data-test="shippingButton"',
+          'data-test="orderPickupButton"',
+          'Add to cart</button>',
+          'available online',
+          'pick up today'
+        ];
+        
+        const outOfStockIndicators = [
+          '"availability_status":"OUT_OF_STOCK"',
+          'Sold out</button>',
+          'Out of stock at',
+          'Out of stock online',
+          'data-test="oosDeliveryOption"',
+          'This item is not available'
+        ];
+        
+        // Check if any in-stock indicators are present
+        const isInStock = inStockIndicators.some(indicator => 
+          text.toLowerCase().includes(indicator.toLowerCase()));
+        
+        // Check if any out-of-stock indicators are present
+        const isOutOfStock = outOfStockIndicators.some(indicator => 
+          text.toLowerCase().includes(indicator.toLowerCase()));
+        
+        // If in-stock indicators are present and out-of-stock indicators are not, consider it in stock
+        if (isInStock && !isOutOfStock) {
+          // Perform additional verification to confirm it's truly in stock
+          return await verifyTargetAvailability(product, tcin);
+        } else if (isOutOfStock) {
+          return false;
+        }
+      }
+    } catch (pageError) {
+      console.error(`Error checking Target product page: ${pageError}`);
+    }
+    
+    // Only use the API as a fallback and with much less frequency
+    if (tcin && /^\d+$/.test(tcin) && Math.random() > 0.7) { // Only try API 30% of the time
+      console.log(`Using Target API for TCIN: ${tcin}`);
+      
+      // Get store ID if we have it stored (for pickup availability)
+      const storeInfo = await chrome.storage.sync.get(['targetStoreId']);
+      const storeId = storeInfo.targetStoreId || '';
+      
+      // Only try one API endpoint to reduce request count
+      const apiUrl = `https://redsky.target.com/redsky_aggregations/v1/web/pdp_client_v1?key=feee1e2d7f9aabd4e1b9604359f7c52e&tcin=${tcin}&pricing_store_id=${storeId}`;
+      
+      try {
+        const response = await targetRequestQueue.enqueue(apiUrl, {
+          headers: { 'Accept': 'application/json' }
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          
+          if (data.data && data.data.product) {
+            const product = data.data.product;
+            
+            // Check button state
+            if (product.button_state && product.button_state !== "OUT_OF_STOCK" && 
+                product.button_state !== "SOLD_OUT") {
+              // Perform additional verification to confirm it's truly in stock
+              return await verifyTargetAvailability(product, tcin);
+            }
+          }
+        }
+      } catch (apiError) {
+        console.error(`Target API error:`, apiError);
+      }
+    }
+    
+    return false;
+  } catch (error) {
+    console.error(`Error checking Target stock for ${product.url}:`, error);
+    return false;
+  }
+}
+
+// Modify the verifyTargetAvailability function to use the queue as well
+async function verifyTargetAvailability(product, tcin) {
+  try {
+    // If we don't have a TCIN, extract it
+    if (!tcin && product.url.includes('/A-')) {
+      const parts = product.url.split('/A-');
+      if (parts.length > 1) {
+        tcin = parts[1].split('?')[0].split('#')[0];
+      }
+    }
+    
+    if (!tcin) {
+      console.log('Could not extract TCIN for secondary verification');
+      return false;
+    }
+    
+    // The most reliable way is to see if the "Add to Cart" button is present and enabled
+    // Let's create a temporary tab to check this
+    // This is much less likely to be blocked because it's browser automation rather than API calls
+    
+    // We'll use this approach sparingly (only when a product seems to be in stock)
+    try {
+      // Create a tab but don't make it active to avoid disrupting the user
+      const tab = await chrome.tabs.create({ 
+        url: product.url, 
+        active: false 
+      });
+      
+      // Wait for the page to load
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      
+      // Run a script in the context of the page to check if Add to Cart button exists and is enabled
+      const results = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: checkAddToCartButton
+      });
+      
+      // Close the tab
+      chrome.tabs.remove(tab.id);
+      
+      // If the button was found and enabled, the product is in stock
+      if (results && results[0] && results[0].result && results[0].result.buttonFound) {
+        return !results[0].result.buttonDisabled;
+      }
+    } catch (tabError) {
+      console.error("Tab verification failed:", tabError);
+    }
+    
+    // As an absolute last resort, try the fulfillment API (but very infrequently)
+    if (Math.random() > 0.9) { // Only 10% of the time
+      try {
+        const fulfillmentUrl = `https://www.target.com/v1/available_to_promise/fulfill?key=feee1e2d7f9aabd4e1b9604359f7c52e`;
+        
+        const payload = {
+          "items": [{
+            "tcin": tcin,
+            "quantity": 1
+          }]
+        };
+        
+        const response = await targetRequestQueue.enqueue(fulfillmentUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          
+          if (data && data.items && data.items.length > 0) {
+            const item = data.items[0];
+            
+            // Check if item can be fulfilled
+            if (item.fulfillment && 
+                ((item.fulfillment.shipping && item.fulfillment.shipping.available) ||
+                 (item.fulfillment.pickup && item.fulfillment.pickup.availability === "AVAILABLE"))) {
+              return true;
+            }
+            
+            if (item.available) {
+              return true;
+            }
+          }
+        }
+      } catch (fulfillError) {
+        console.error("Fulfillment check failed:", fulfillError);
+      }
+    }
+    
+    return false;
+  } catch (error) {
+    console.error("Target availability verification failed:", error);
+    return false;
+  }
+}
+
+// This function runs in the context of the product page
+function checkAddToCartButton() {
+  try {
+    // Look for Add to Cart buttons
+    const addToCartSelectors = [
+      'button[data-test="addToCartButton"]',
+      'button[data-test="shippingButton"]',
+      'button[data-test="orderPickupButton"]',
+      'button[class*="AddToCart"]',
+      'button:contains("Add to cart")'
+    ];
+    
+    let buttonFound = false;
+    let buttonDisabled = true;
+    
+    // Check each selector
+    for (const selector of addToCartSelectors) {
+      let buttons;
+      
+      // Handle jQuery-style :contains selector
+      if (selector.includes(":contains")) {
+        const text = selector.match(/:contains\("(.+)"\)/)[1];
+        buttons = Array.from(document.querySelectorAll('button')).filter(
+          btn => btn.textContent.includes(text)
+        );
+      } else {
+        buttons = document.querySelectorAll(selector);
+      }
+      
+      for (const button of buttons) {
+        if (button && button.offsetParent !== null) { // Button is visible
+          buttonFound = true;
+          buttonDisabled = button.disabled || 
+                          button.classList.contains('disabled') ||
+                          button.getAttribute('aria-disabled') === 'true';
+          
+          // If we found an enabled button, we can stop searching
+          if (!buttonDisabled) {
+            break;
+          }
+        }
+      }
+      
+      if (buttonFound && !buttonDisabled) {
+        break;
+      }
+    }
+    
+    // Also check if "This item is not available" or "Sold out" text is present
+    const outOfStockText = document.body.innerText.includes("This item is not available") ||
+                           document.body.innerText.includes("Sold out") ||
+                           document.body.innerText.includes("Out of stock");
+    
+    return { 
+      buttonFound, 
+      buttonDisabled: buttonDisabled || outOfStockText,
+      outOfStockText
+    };
+  } catch (error) {
+    console.error("Error checking Add to Cart button:", error);
+    return { buttonFound: false, buttonDisabled: true, error: error.toString() };
+  }
+}
