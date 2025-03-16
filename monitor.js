@@ -55,9 +55,9 @@ document.addEventListener('DOMContentLoaded', function() {
       if (response) {
         purchaseCountElement.textContent = `Items Purchased: ${response.count}/${response.limit}`;
         
-        // Disable all add to cart buttons if limit reached
+        // Disable all cart buttons if limit reached
         if (response.count >= response.limit) {
-          document.querySelectorAll('.cart-btn, .checkout-btn').forEach(btn => {
+          document.querySelectorAll('.cart-btn').forEach(btn => {
             btn.disabled = true;
             btn.title = 'Purchase limit reached';
           });
@@ -115,8 +115,8 @@ document.addEventListener('DOMContentLoaded', function() {
         updatePurchaseCountDisplay();
         statusMessageElement.textContent = 'Purchase count reset!';
         
-        // Re-enable add to cart buttons
-        document.querySelectorAll('.cart-btn, .checkout-btn').forEach(btn => {
+        // Re-enable cart buttons
+        document.querySelectorAll('.cart-btn').forEach(btn => {
           if (!btn.hasAttribute('data-disabled-stock')) {
             btn.disabled = false;
             btn.title = '';
@@ -407,7 +407,7 @@ document.addEventListener('DOMContentLoaded', function() {
           <div class="product-details">
             <div class="product-name">${product.name}</div>
             <div class="product-url">${product.url}</div>
-            <div class="product-option">${product.autoCheckout ? 'Auto-checkout: Enabled' : 'Auto-checkout: Disabled'}</div>
+            <div class="product-option">${product.autoCheckout ? 'Auto-add to cart: Enabled' : 'Auto-add to cart: Disabled'}</div>
             ${product.addToCartUrl ? '<div class="product-option">Direct Add to Cart URL: ✓</div>' : ''}
             ${stockStatusHtml}
           </div>
@@ -419,13 +419,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     title="${buttonTitle}"
                     ${!status || !status.inStock ? 'data-disabled-stock="true"' : ''}>
               Add to Cart
-            </button>
-            <button class="checkout-btn" 
-                    data-url="${product.url}" 
-                    ${disableButtons ? 'disabled' : ''}
-                    title="${buttonTitle}"
-                    ${!status || !status.inStock ? 'data-disabled-stock="true"' : ''}>
-              Checkout
             </button>
             <button class="remove-btn" data-url="${product.url}">Remove</button>
           </div>
@@ -508,60 +501,6 @@ document.addEventListener('DOMContentLoaded', function() {
               setTimeout(() => {
                 button.textContent = 'Add to Cart';
                 button.disabled = false;
-              }, 3000);
-            }
-          });
-        }
-      });
-    });
-    
-    // Add event listeners to checkout buttons
-    document.querySelectorAll('.checkout-btn').forEach(button => {
-      button.addEventListener('click', (e) => {
-        const url = e.target.getAttribute('data-url');
-        const product = getProductByUrl(url);
-        
-        if (product) {
-          button.textContent = 'Processing...';
-          button.disabled = true;
-          
-          chrome.runtime.sendMessage({
-            action: 'startCheckout',
-            product: product
-          }, (response) => {
-            if (response && response.success) {
-              button.textContent = 'Started!';
-              updatePurchaseCountDisplay(); // Update the count display
-              statusMessageElement.textContent = 'Checkout process started! Check your open tab.';
-              
-              setTimeout(() => {
-                button.textContent = 'Checkout';
-                // Check if we should keep the button disabled
-                chrome.runtime.sendMessage({ action: 'getPurchaseStats' }, (stats) => {
-                  const limitReached = stats && stats.count >= stats.limit;
-                  button.disabled = limitReached;
-                  button.title = limitReached ? 'Purchase limit reached' : '';
-                });
-                statusMessageElement.textContent = '';
-              }, 5000);
-            } else if (response && response.limitReached) {
-              button.textContent = 'Limit Reached';
-              statusMessageElement.textContent = 'Purchase limit reached. Reset count to buy more.';
-              
-              setTimeout(() => {
-                button.textContent = 'Checkout';
-                button.disabled = true;
-                button.title = 'Purchase limit reached';
-                statusMessageElement.textContent = '';
-              }, 3000);
-            } else {
-              button.textContent = 'Failed';
-              statusMessageElement.textContent = 'Checkout process failed. Try manual checkout.';
-              
-              setTimeout(() => {
-                button.textContent = 'Checkout';
-                button.disabled = false;
-                statusMessageElement.textContent = '';
               }, 3000);
             }
           });
